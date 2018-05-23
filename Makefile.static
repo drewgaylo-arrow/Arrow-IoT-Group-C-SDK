@@ -13,7 +13,7 @@ ifeq ($(OS),Windows_NT)
   WIN_ENV := yes
  endif
   dots = :
-  cross_abspath = $(if $(findstring $(dots),$(1)),$(1),$(abspath $(1)))
+  cross_abspath ?= $(if $(findstring $(dots),$(1)),$(1),$(abspath $(1)))
 else
   cross_abspath = $(abspath $1)
 endif
