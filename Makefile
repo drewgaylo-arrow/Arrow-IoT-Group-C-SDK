@@ -18,10 +18,10 @@
 #
 #==========================================================
 SDK_PATH = .
-SDK_IMPL = skeleton
-LIBDIR = build
+SDK_IMPL = . 
+LIBDIR ?= build
 
-WOLFSSL = no
+WOLFSSL ?= no
 CJSON = yes
 
 BUILD_MACHINE = cygwin
@@ -31,6 +31,8 @@ GCC_PREFIX =
 PLATFORM =
 
 OPT ?= -O0 
+
+CC_SYMBOLS = -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -std=gnu11 -ffunction-sections -fdata-sections
 
 # Bounds checking, default to local dir
 ####################################################
@@ -61,9 +63,7 @@ default: all
 all: $(SDK_TARGET)
 
 info:
-	echo $(GCC_BIN)
-	echo $(CC)
-	echo $(SDK_PATH)
+	echo $(SDK_SRC)
 
 new: clean all
 
@@ -72,3 +72,4 @@ test:
 
 clean:
 	rm -rf $(LIBDIR)/acn-sdk-c
+	rm -rf $(LIBDIR)/*.a
