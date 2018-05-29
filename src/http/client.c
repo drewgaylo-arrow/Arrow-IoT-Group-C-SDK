@@ -68,7 +68,9 @@ static int client_recv(void *c, uint16_t len) {
             return -1;
         }
     }
-    HTTP_DBG("%d|%s|", ret, tmp);
+    // Stomp a \0 at the end of the buffer, durrr
+	tmp[ret]=0;
+    HTTP_DBG("RX %d: %s", ret, tmp);
     FREE_CHUNK(tmp);
     return ret;
 }
@@ -84,7 +86,9 @@ static int simple_write(void *c, uint8_t *buf, uint16_t len) {
     } else {
         if ( !len ) len = strlen((char*)buf);
     }
-    HTTP_DBG("%d|%s|", len, buf);
+    // Stomp a \0 at the end of the buffer, durrr
+    buf[len]=0;
+    HTTP_DBG("TX %d: %s", len, buf);
     int ret = -1;
     if ( cli->flags._cipher ) {
         ret = ssl_send(cli->sock, (char*)buf, (int)len);
@@ -477,6 +481,8 @@ int default_http_client_do(http_client_t *cli, http_response_t *res) {
     http_request_t *req = cli->request;
     if ( !req ) return -1;
     http_response_init(res, &req->_response_payload_meth);
+
+    HTTP_DBG("Starting default do\n");
 
     if ( send_start(cli, req, cli->queue) < 0 ) {
         DBG("send start fail");

@@ -33,6 +33,7 @@ PLATFORM =
 OPT ?= -O0 
 
 CC_SYMBOLS = -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -std=gnu11 -ffunction-sections -fdata-sections
+CC_SYMBOLS +=  -DHTTP_DEBUG -DDEBUG
 
 # Bounds checking, default to local dir
 ####################################################
