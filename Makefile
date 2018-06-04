@@ -19,7 +19,7 @@
 #==========================================================
 
 #TARGET_BOARD = nucleo
-TARGET_BOARD = samd21
+#TARGET_BOARD = samd21
 
 SDK_PATH = .
 SDK_IMPL = . 
@@ -27,8 +27,11 @@ LIBDIR ?= build
 
 WOLFSSL ?= no
 CJSON = yes
+#NO_MQTT=1
+#HTTP_DEBUG=1
 
-BUILD_MACHINE = cygwin
+
+BUILD_MACHINE = linux
 
 GCC_BIN = 
 GCC_PREFIX = 
@@ -36,13 +39,17 @@ PLATFORM =
 
 OPT ?= -O0 
 
-# Nucleo settings
 ifeq ($(TARGET_BOARD),nucleo)
+# Nucleo settings
 CC_SYMBOLS = -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -std=gnu11 -ffunction-sections -fdata-sections
-endif
-# SAMD21 settings
+else
 ifeq ($(TARGET_BOARD),samd21)
+# SAMD21 settings
 CC_SYMBOLS = -mthumb -D__SAMD21G18A__ -DDEBUG  -ffunction-sections -mlong-calls -mcpu=cortex-m0plus -std=gnu99
+else
+# Linux system
+CC_SYMBOLS = -std=gnu99 -ffunction-sections -fdata-sections
+endif
 endif
 
 # ALL
@@ -65,7 +72,6 @@ GCC_PREFIX = arm-none-eabi
 endif
 cross_abspath = $1
 endif
-
 
 #"C:\Program Files (x86)\Atmel\Studio\7.0\toolchain\arm\arm-gnu-toolchain\bin\arm-none-eabi-gcc.exe"
 

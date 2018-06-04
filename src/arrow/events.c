@@ -6,21 +6,17 @@
  * Contributors: Arrow Electronics, Inc.
  */
 
-#include "arrow/events.h"
-
 #if !defined(NO_EVENTS)
 
+#include "arrow/events.h"
 #include <arrow/device_command.h>
 #include <arrow/state.h>
-
 #if !defined(NO_RELEASE_UPDATE)
 #include <arrow/software_release.h>
 #endif
-
 #if !defined(NO_SOFTWARE_UPDATE)
-# include <arrow/software_update.h>
+#include <arrow/software_update.h>
 #endif
-
 #if defined(DEVICE_STARTSTOP)
 #include <arrow/device_startstop.h>
 #endif
@@ -61,6 +57,8 @@ static void mqtt_event_free(mqtt_event_t *mq) {
   if ( mq->parameters ) json_delete(mq->parameters);
 }
 
+// Types and definitions
+// --------------------------------------------------------------------------
 typedef int (*submodule)(void *, JsonNode *);
 typedef void (*module_init)();
 typedef void (*module_deinit)();
@@ -71,31 +69,67 @@ typedef struct {
   module_deinit deinit;
 } sub_t;
 
+// Local prototypes
+// ---------------------------------------------------------------------------
+static int check_sign_1(const char *sign, mqtt_event_t *ev, const char *can);
+
+// Local variables
+// ---------------------------------------------------------------------------
 sub_t sub_list[] = {
   { "ServerToGateway_DeviceCommand", ev_DeviceCommand, NULL, arrow_command_handler_free },
   { "SendCommand", ev_DeviceCommand, NULL, NULL },
   { "ServerToGateway_DeviceStateRequest", ev_DeviceStateRequest, NULL, NULL },
-#if !defined(NO_SOFTWARE_UPDATE)
+  #if !defined(NO_SOFTWARE_UPDATE)
   { "ServerToGateway_GatewaySoftwareUpdate", ev_GatewaySoftwareUpdate, NULL, NULL },
-#endif
-#if !defined(NO_RELEASE_UPDATE)
+  #endif
+  #if !defined(NO_RELEASE_UPDATE)
   { "ServerToGateway_DeviceSoftwareRelease", ev_DeviceSoftwareRelease, NULL, NULL },
   { "ServerToGateway_GatewaySoftwareRelease", ev_DeviceSoftwareRelease, NULL, NULL },
-#endif
-#if defined(DEVICE_STARTSTOP)
-    { "ServerToGateway_DeviceStart", ev_DeviceSoftwareRelease, NULL, NULL },
-    { "ServerToGateway_DeviceStop", ev_DeviceSoftwareRelease, NULL, NULL },
-#endif
-    { NULL, NULL, NULL, NULL }
+  #endif
+  #if defined(DEVICE_STARTSTOP)
+  { "ServerToGateway_DeviceStart", ev_DeviceSoftwareRelease, NULL, NULL },
+  { "ServerToGateway_DeviceStop", ev_DeviceSoftwareRelease, NULL, NULL },
+  #endif
+  { NULL, NULL, NULL, NULL }
 };
 
-// checker
+// Create a linked list to hold all events
+static mqtt_event_t *__event_queue = NULL;
+#if defined(ARROW_THREAD)
+static arrow_mutex *_event_mutex = NULL;
+#endif
 
+
+// Signature checker?
 typedef int(*sign_checker)(const char *, mqtt_event_t *, const char *);
 struct check_signature_t {
   const char *version;
   sign_checker check;
 };
+static struct check_signature_t checker_collection[] = {
+  {"1", check_sign_1},
+};
+
+// Private functions
+// ---------------------------------------------------------------------------
+
+static void free_mqtt_event(mqtt_event_t *mq)
+{
+  if ( mq->gateway_hid.value ) free(mq->gateway_hid.value);
+  if ( mq->device_hid.value ) free(mq->device_hid.value);
+  if ( mq->cmd ) free(mq->cmd);
+  if ( mq->name.value ) free(mq->name.value);
+  if ( mq->parameters ) json_delete(mq->parameters);
+}
+
+static int fill_string_from_json(JsonNode *_node, const char *name, char **str) {
+	property_t prop;
+	prop.value = (char*)name;
+  JsonNode *tmp = json_find_member(_node, prop);
+  if ( ! tmp || tmp->tag != JSON_STRING ) return -1;
+  *str = strdup(tmp->string_);
+  return 0;
+}
 
 static int check_sign_1(const char *sign, mqtt_event_t *ev, const char *can) {
   char signature[65] = {0};
@@ -109,10 +143,6 @@ static int check_sign_1(const char *sign, mqtt_event_t *ev, const char *can) {
   DBG("cmp { %s, %s }", sign, signature);
   return ( strcmp(sign, signature) == 0 ? 0 : -1 );
 }
-
-static struct check_signature_t checker_collection[] = {
-  {"1", check_sign_1},
-};
 
 static int check_signature(const char *vers, const char *sing, mqtt_event_t *ev, const char *canParamStr) {
   unsigned int i = 0;
@@ -192,7 +222,7 @@ int booble(str_t *s, int len) {
     }
     return 0;
 }
-
+#if 0
 static char *form_canonical_prm(JsonNode *param) {
   JsonNode *child;
   char *canParam = static_canonical_prm;
@@ -241,6 +271,7 @@ static char *form_canonical_prm(JsonNode *param) {
   booble(can_list, count);
   return canParam;
 }
+#endif
 
 #if 0
 static __attribute_used__ char *form_canonical_prm2(JsonNode *param) {
@@ -305,21 +336,25 @@ can_list_error:
 
 
 
-static mqtt_event_t *__event_queue = NULL;
-#if defined(ARROW_THREAD)
-static arrow_mutex *_event_mutex = NULL;
-#endif
+// Public functions
+// ---------------------------------------------------------------------------
 
-void arrow_mqtt_events_init(void) {
-#if defined(ARROW_THREAD)
+// Initialize the list of events.  If the init function
+// is specified, call the function
+void arrow_mqtt_events_init(void)
+{
+	#if defined(ARROW_THREAD)
     arrow_mutex_init(&_event_mutex);
-#endif
+	#endif
     int i = 0;
     for (i=0; i < (int)(sizeof(sub_list)/sizeof(sub_t)); i++) {
       if ( sub_list[i].init ) sub_list[i].init();
     }
+    return;
 }
 
+// Check to see if the events linked list has
+// items in it
 int arrow_mqtt_has_events(void) {
     int ret = -1;
     MQTT_EVENTS_QUEUE_LOCK;
@@ -333,10 +368,20 @@ int arrow_mqtt_has_events(void) {
     return ret;
 }
 
-int arrow_mqtt_event_proc(void) {
+// Process the first node in the linked list
+// and call proc() from sub_list
+// if we have a matching event
+int arrow_mqtt_event_proc(void)
+{
     mqtt_event_t *tmp = NULL;
+    int ret = -1;
+    submodule current_processor = NULL;
+
+    // Get the head of the list in to 'tmp'
+    // then remove the 'head' node from event list.
     MQTT_EVENTS_QUEUE_LOCK;
     tmp = __event_queue;
+    // If empty list, exit
     if ( !tmp ) {
         MQTT_EVENTS_QUEUE_UNLOCK;
         return -1;
@@ -344,21 +389,31 @@ int arrow_mqtt_event_proc(void) {
     arrow_linked_list_del_node_first(__event_queue, mqtt_event_t);
     MQTT_EVENTS_QUEUE_UNLOCK;
 
-    submodule current_processor = NULL;
+    // Now we have the head of the linked list in 'tmp'
+
+    // Loop over the sub_list and see if the event
+    // matches.
     int i = 0;
     for (i=0; i < (int)(sizeof(sub_list)/sizeof(sub_t)); i++) {
       if ( sub_list[i].name && strcmp(sub_list[i].name, P_VALUE(tmp->name)) == 0 ) {
         current_processor = sub_list[i].proc;
+        // break out of loop??
       }
     }
-    int ret = -1;
+
+    // current_processor is the proc() for the event
+
+    // Run the proc()
     if ( current_processor ) {
       ret = current_processor(tmp, tmp->parameters);
     } else {
       DBG("No event processor for %s", tmp->name);
       goto mqtt_event_proc_error;
     }
+
+    // If we still have events in the queue return 1
     if ( __event_queue ) ret = 1;
+
 mqtt_event_proc_error:
     mqtt_event_free(tmp);
 #if defined(STATIC_MQTT_ENV)
@@ -392,21 +447,24 @@ int process_event(const char *str) {
       return -1;
   }
 
-  if ( fill_string_from_json(_main, p_const("hid"), &mqtt_e->gateway_hid) < 0 ) {
+  property_t prop;
+  prop = p_const("hid");
+  if ( fill_string_from_json(_main, prop.value , &mqtt_e->gateway_hid.value) < 0 ) {
     DBG("cannot find HID");
     goto error;
   }
-#if defined(DEBUG_MQTT_PROCESS_EVENT)
+  #if defined(DEBUG_MQTT_PROCESS_EVENT)
   DBG("ev ghid: %s", mqtt_e->gateway_hid);
-#endif
+  #endif
 
-  if ( fill_string_from_json(_main, p_const("name"), &mqtt_e->name) < 0 ) {
+  prop = p_const("name");
+  if ( fill_string_from_json(_main, prop.value, &mqtt_e->name.value) < 0 ) {
     DBG("cannot find name");
     goto error;
   }
-#if defined(DEBUG_MQTT_PROCESS_EVENT)
+  #if defined(DEBUG_MQTT_PROCESS_EVENT)
   DBG("ev name: %s", mqtt_e->name);
-#endif
+  #endif
 
   if ( IS_EMPTY(mqtt_e->gateway_hid) || IS_EMPTY(mqtt_e->name) ) {
       DBG("EMPTY parameters {%s, %s}", P_VALUE(mqtt_e->gateway_hid), P_VALUE(mqtt_e->name));
@@ -423,6 +481,8 @@ int process_event(const char *str) {
 #if defined(DEBUG_MQTT_PROCESS_EVENT)
       DBG("signature vertsion: %s", sign_version->string_);
 #endif
+
+#if 0
     JsonNode *sign = json_find_member(_main, p_const("signature"));
     if ( !sign ) goto error;
     char *can = form_canonical_prm(_parameters);
@@ -440,7 +500,11 @@ int process_event(const char *str) {
 #if !defined(STATIC_MQTT_ENV)
     free(can);
 #endif
+
+#endif
+
   }
+
   json_remove_from_parent(_parameters);
   mqtt_e->parameters = _parameters;
   ret = 0;
@@ -459,15 +523,19 @@ error:
   return ret;
 }
 
-void arrow_mqtt_events_done() {
-#if defined(ARROW_THREAD)
-    arrow_mutex_deinit(_event_mutex);
-#endif
+// End the list of events.  If the deinit function
+// is specified, call the function
+void arrow_mqtt_events_done()
+{
+  #if defined(ARROW_THREAD)
+  arrow_mutex_deinit(_event_mutex);
+  #endif
     int i = 0;
     for (i=0; i < (int)(sizeof(sub_list)/sizeof(sub_t)); i++) {
       if ( sub_list[i].deinit ) sub_list[i].deinit();
     }
 }
+
 #else
 typedef void __dummy;
 #endif
