@@ -3,7 +3,8 @@ import os
 from subprocess import call
 
 build_dir = "build"
-release_dir = "release"
+#release_dir = "release_atollic"
+release_dir = "release_SAMD21"
 
 library = "libacnsdkc.a"
 lib_path = build_dir+"/"+library
