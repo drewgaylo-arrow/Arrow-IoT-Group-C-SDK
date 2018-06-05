@@ -5,3 +5,8 @@ gcc*
 *.qbs
 *.sh
 test/build
+*.a
+.build
+build
+.cproject
+.project
