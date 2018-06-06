@@ -138,6 +138,7 @@ int __attribute_weak__ http_client_open(http_client_t *cli, http_request_t *req)
 }
 
 int default_http_client_open(http_client_t *cli, http_request_t *req) {
+
     if ( !cli->queue ) {
         DBG("HTTP: There is no queue");
         return -1;
@@ -153,20 +154,23 @@ int default_http_client_open(http_client_t *cli, http_request_t *req) {
             return ret;
         }
         cli->sock = ret;
+
         // resolve the host
         struct sockaddr_in serv;
         struct hostent *serv_resolve;
         property_t null_term_host = property_as_null_terminated(&req->host);
+
         serv_resolve = gethostbyname(P_VALUE(null_term_host));
         property_free(&null_term_host);
         if (serv_resolve == NULL) {
             DBG("ERROR, no such host");
             return -1;
         }
+
         memset(&serv, 0, sizeof(serv));
         serv.sin_family = PF_INET;
-        bcopy((char *)serv_resolve->h_addr,
-                (char *)&serv.sin_addr.s_addr,
+        bcopy((struct in_addr *)&(serv_resolve->h_addr_list[0]),
+                (struct in_addr *)&(serv.sin_addr),
                 (uint32_t)serv_resolve->h_length);
         serv.sin_port = htons(req->port);
 
@@ -178,7 +182,7 @@ int default_http_client_open(http_client_t *cli, http_request_t *req) {
 
         ret = connect(cli->sock, (struct sockaddr*)&serv, sizeof(serv));
         if ( ret < 0 ) {
-            DBG("connect fail");
+            DBG("connect fail ret: %d",ret);
             soc_close(cli->sock);
             cli->sock = -1;
             return -1;
