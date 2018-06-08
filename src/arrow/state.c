@@ -118,7 +118,7 @@ static void state_value_string_free(arrow_state_list_t *st) {
 }
 
 state_handle_t state_adder[] = {
-    {NULL, NULL},
+    {NULL, NULL, NULL, NULL},
     {state_add_bool, state_value_bool_json, state_value_bool_parse, NULL},
     {state_value_string_add, state_value_string_json, state_value_string_parse, state_value_string_free},
     {state_add_number, state_value_number_json, state_value_number_parse, NULL}

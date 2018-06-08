@@ -64,7 +64,6 @@ void property_move(property_t *dst, property_t *src) {
         handler->move(dst, src);
         property_free(src);
     }
-
 }
 
 size_t property_size(property_t *src) {
@@ -121,7 +120,7 @@ void property_free(property_t *dst) {
 
 int property_cmp(property_t *src, property_t *dst) {
     if ( src->flags & is_raw ) {
-        if ( src->size == src->size &&
+        if ( dst->size == src->size &&
              strncmp(src->value, dst->value, src->size) == 0 ) return 0;
         return -1;
     }
